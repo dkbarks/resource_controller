@@ -18,12 +18,16 @@ module ResourceController
     def create
       build_object
       load_object
-      before :create
-      if object.save
-        after :create
+     begin
+        ActiveRecord::Base.transaction do
+          before :create
+          object.save!
+          after :create
+        end
         set_flash :create
         response_for :create
-      else
+      rescue ActiveRecord::RecordInvalid=>exc
+        ActiveRecord::Base.logger.exc exc
         after :create_fails
         set_flash :create_fails
         response_for :create_fails
@@ -33,15 +37,21 @@ module ResourceController
     def update
       load_object
       before :update
-      if object.update_attributes object_params
-        after :update
-        set_flash :update
-        response_for :update
-      else
-        after :update_fails
-        set_flash :update_fails
-        response_for :update_fails
-      end
+       begin
+          ActiveRecord::Base.transaction do
+            before :update
+            #object.attributes = object_params
+            object.update_attributes!(object_params)
+            after :update
+          end
+          set_flash :update
+          response_for :update
+        rescue ActiveRecord::RecordInvalid
+          ActiveRecord::Base.logger.exc
+          after :update_fails
+          set_flash :update_fails
+          response_for :update_fails
+        end
     end
 
     def new
@@ -59,12 +69,16 @@ module ResourceController
 
     def destroy
       load_object
-      before :destroy
-      if object.destroy
-        after :destroy
+      begin
+        ActiveRecord::Base.transaction do
+          before :destroy
+          raise ActiveRecord::RecordInvalid.new(object) unless object.destroy
+          after :destroy
+        end
         set_flash :destroy
         response_for :destroy
-      else
+      rescue ActiveRecord::RecordInvalid
+        ActiveRecord::Base.logger.exc
         after :destroy_fails
         set_flash :destroy_fails
         response_for :destroy_fails
